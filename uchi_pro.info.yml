@@ -3,5 +3,6 @@ type: module
 description: Интеграция с СДО Uchi.pro.
 package: Uchi.pro
 core_version_requirement: ^8.8.0 || ^9.0 || ^10
-version: 2.0.0
+version: 2.1.0
 configure: uchi_pro.settings
+php: 8.2

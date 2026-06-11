@@ -70,6 +70,12 @@ class SettingsForm extends ConfigFormBase {
       '#default_value' => $config->get('update_courses_titles'),
     ];
 
+    $form['import_courses']['update_courses_descriptions'] = [
+      '#type' => 'checkbox',
+      '#title' => 'Обновлять описания курсов при импорте',
+      '#default_value' => $config->get('update_courses_descriptions'),
+    ];
+
     $form['import_courses']['update_courses_prices'] = [
       '#type' => 'checkbox',
       '#title' => 'Обновлять цены курсов при импорте',
@@ -195,6 +201,7 @@ class SettingsForm extends ConfigFormBase {
     $ignoredThemesIds = $form_state->getValue('ignored_themes_ids');
     $publishCoursesOnImport = $form_state->getValue('publish_courses_on_import');
     $updateCoursesTitles = $form_state->getValue('update_courses_titles');
+    $updateCoursesDescriptions = $form_state->getValue('update_courses_descriptions');
     $updateCoursesPrices = $form_state->getValue('update_courses_prices');
     $importTypes = $form_state->getValue('import_types');
     $useCron = $form_state->getValue('use_cron');
@@ -221,6 +228,7 @@ class SettingsForm extends ConfigFormBase {
     $config->set('ignored_themes_ids', $ignoredThemesIds);
     $config->set('publish_courses_on_import', $publishCoursesOnImport);
     $config->set('update_courses_titles', $updateCoursesTitles);
+    $config->set('update_courses_descriptions', $updateCoursesDescriptions);
     $config->set('update_courses_prices', $updateCoursesPrices);
     $config->set('import_types', $importTypes);
     $config->set('use_cron', $useCron);

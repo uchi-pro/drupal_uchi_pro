@@ -299,6 +299,7 @@ class ImportCoursesService
 
     $needPublishCoursesOnImport = $settings->get('publish_courses_on_import');
     $needUpdateCoursesTitles = $settings->get('update_courses_titles');
+    $needUpdateCoursesDescriptions = $settings->get('update_courses_descriptions');
     $needUpdateCoursesPrices = $settings->get('update_courses_prices');
     $needImportTypes = $this->needImportTypes();
 
@@ -355,6 +356,10 @@ class ImportCoursesService
           'status' => $needPublishCoursesOnImport ? 1 : 0,
           'title' => $shortTitle,
           'field_course_title' => ['value' => $apiCourse->title],
+          'field_course_description' => [
+              'value' => $apiCourse->description,
+              'format' => 'full_html',
+            ],
           'field_course_id' => ['value' => $apiCourse->id],
           'field_course_price' => ['value' => $price],
         ]);
@@ -392,6 +397,15 @@ class ImportCoursesService
         $needSave = true;
         $courseNode->set('title', $shortTitle);
         $courseNode->set('field_course_title', $apiCourse->title);
+      }
+
+      if ($needUpdateCoursesDescriptions && ($apiCourse->description != $previousApiCourse->description)) {
+        $needSave = true;
+        // Передаем массив с ключами value и format
+        $courseNode->set('field_course_description', [
+          'value' => $apiCourse->description,
+          'format' => 'full_html',
+        ]);
       }
 
       if ($needUpdateCoursesPrices && ($price != $previousApiCourse->price)) {
@@ -489,6 +503,7 @@ class ImportCoursesService
       $apiCourse->type = $type;
     }
     $apiCourse->title = $node->get('field_course_title')->getString();
+    $apiCourse->description = $node->get('field_course_description')->getString();
     $apiCourse->price = $node->get('field_course_price')->getString();
     $apiCourse->hours = $node->get('field_course_hours')->getString();
 

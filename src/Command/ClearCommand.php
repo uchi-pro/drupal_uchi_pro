@@ -34,6 +34,7 @@ class ClearCommand extends Command {
 
     $nids = \Drupal::entityQuery('node')
       ->condition('type', ['course', 'theme', 'training_type'], 'IN')
+      ->accessCheck(TRUE)
       ->execute();
 
     $storage_handler = \Drupal::entityTypeManager()->getStorage('node');

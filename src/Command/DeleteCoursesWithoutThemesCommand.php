@@ -27,6 +27,7 @@ class DeleteCoursesWithoutThemesCommand extends Command {
 
     $nids = \Drupal::entityQuery('node')
       ->condition('type', ['course'], 'IN')
+      ->accessCheck(TRUE)
       ->execute();
 
     $nodes = [];

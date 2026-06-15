@@ -2,6 +2,7 @@
     "name": "drupal/uchi_pro",
     "type": "drupal-module",
     "require": {
+        "php": ">=8.2",
         "uchi-pro/api-client": "^4.1.0"
     }
 }

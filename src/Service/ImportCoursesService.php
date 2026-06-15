@@ -81,7 +81,7 @@ class ImportCoursesService
    */
   protected function getTypesNodes(): array
   {
-    $nids = Drupal::entityQuery('node')->condition('type','training_type')->execute();
+    $nids = Drupal::entityQuery('node')->condition('type','training_type')->accessCheck(FALSE)->execute();
     $nodes = Node::loadMultiple($nids);
 
     $nodesByIds = [];
@@ -99,7 +99,7 @@ class ImportCoursesService
    */
   protected function getThemesNodesByUuids(): array
   {
-    $nids = Drupal::entityQuery('node')->condition('type','theme')->execute();
+    $nids = Drupal::entityQuery('node')->condition('type','theme')->accessCheck(FALSE)->execute();
     $nodes = Node::loadMultiple($nids);
 
     $nodesByIds = [];
@@ -119,7 +119,7 @@ class ImportCoursesService
    */
   protected function getCoursesNodesByUuids(): array
   {
-    $nids = Drupal::entityQuery('node')->condition('type','course')->execute();
+    $nids = Drupal::entityQuery('node')->condition('type','course')->accessCheck(FALSE)->execute();
     $nodes = Node::loadMultiple($nids);
 
     $nodesByIds = [];
@@ -505,7 +505,7 @@ class ImportCoursesService
     $apiCourse->title = $node->get('field_course_title')->getString();
     $apiCourse->description = $node->get('field_course_description')->getString();
     $apiCourse->price = $node->get('field_course_price')->getString();
-    $apiCourse->hours = $node->get('field_course_hours')->getString();
+    $apiCourse->hours = (int)$node->get('field_course_hours')->getString() ?? null;
 
     return $apiCourse;
   }

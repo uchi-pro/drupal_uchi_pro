@@ -82,6 +82,13 @@ class SettingsForm extends ConfigFormBase {
       '#default_value' => $config->get('update_courses_prices'),
     ];
 
+    $form['import_courses']['unpublish_ignored_courses'] = [
+      '#type' => 'checkbox',
+      '#title' => 'Снимать с публикации ранее опубликованные курсы, если они стоят в исключениях',
+      '#default_value' => $config->get('unpublish_ignored_courses'),
+      '#description' => 'Если направление добавлено в исключения, ранее опубликованные курсы этого направления будут сняты с публикации.',
+    ];
+
     $form['import_courses']['import_types'] = [
       '#type' => 'checkbox',
       '#title' => 'Импортировать типы обучения',
@@ -205,6 +212,7 @@ class SettingsForm extends ConfigFormBase {
     $updateCoursesPrices = $form_state->getValue('update_courses_prices');
     $importTypes = $form_state->getValue('import_types');
     $useCron = $form_state->getValue('use_cron');
+    $unpublishIgnoredCourses = $form_state->getValue('unpublish_ignored_courses');
     $leadsWebforms = $form_state->hasValue('leads_webforms')
       ? array_values(array_filter($form_state->getValue('leads_webforms')))
       : [];
@@ -232,6 +240,7 @@ class SettingsForm extends ConfigFormBase {
     $config->set('update_courses_prices', $updateCoursesPrices);
     $config->set('import_types', $importTypes);
     $config->set('use_cron', $useCron);
+    $config->set('unpublish_ignored_courses', $unpublishIgnoredCourses);
     $config->set('leads_available', $leadsAvailable);
     $config->set('leads_webforms', $leadsWebforms);
     $config->save();

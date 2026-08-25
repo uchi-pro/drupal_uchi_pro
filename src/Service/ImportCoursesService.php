@@ -657,12 +657,16 @@ class ImportCoursesService
     $settings = $this->getSettings();
 
     if ($settings->get('update_courses_titles') && ($apiCourse->title != $previousApiCourse->title)) {
+      // Если нужно обновлять названия и название изменилось.
       $changedFields[] = 'title';
       $courseNode->set('title', $shortTitle);
       $courseNode->set('field_course_title', $apiCourse->title);
     }
 
-    if ($settings->get('update_courses_descriptions') && ($apiCourse->description != $previousApiCourse->description)) {
+    $normalizeDescription = fn(?string $html): string => trim(preg_replace('/\s+/', ' ', strip_tags((string)$html)));
+    if ($settings->get('update_courses_descriptions') &&
+      $normalizeDescription($apiCourse->description) !== $normalizeDescription($previousApiCourse->description)) {
+      // Если нужно обновлять описание и описание изменилось.
       $changedFields[] = 'field_course_description';
       $courseNode->set('field_course_description', [
         'value' => $apiCourse->description,
@@ -671,6 +675,7 @@ class ImportCoursesService
     }
 
     if ($settings->get('update_courses_prices') && !is_null($apiPrice) && ($price != $previousApiCourse->price)) {
+      // Если нужно обновлять цены и цена изменилась.
       $changedFields[] = 'field_course_price';
       $courseNode->set('field_course_price', ['value' => $apiCourse->price]);
     }
@@ -848,7 +853,8 @@ class ImportCoursesService
       $apiCourse->type = $type;
     }
     $apiCourse->title = $node->get('field_course_title')->getString();
-    $apiCourse->description = $node->get('field_course_description')->getString();
+    $rawDescription = $node->get('field_course_description')->getValue()[0]['value'] ?? '';
+    $apiCourse->description = $rawDescription;
     $apiCourse->price = $node->get('field_course_price')->getString();
     $apiCourse->hours = (int)$node->get('field_course_hours')->getString() ?? null;
 

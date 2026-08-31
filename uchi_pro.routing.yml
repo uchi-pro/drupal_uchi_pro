@@ -5,3 +5,11 @@ uchi_pro.settings:
     _form: '\Drupal\uchi_pro\Form\SettingsForm'
   requirements:
     _permission: 'administer site configuration'
+
+uchi_pro.debug:
+  path: '/admin/config/content/uchi-pro/debug'
+  defaults:
+    _title: ''
+    _controller: '\Drupal\uchi_pro\Controller\DebugController::index'
+  requirements:
+    _permission: 'administer site configuration'

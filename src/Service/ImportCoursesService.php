@@ -3,6 +3,7 @@
 namespace Drupal\uchi_pro\Service;
 
 use Drupal;
+use Drupal\Core\Config\ImmutableConfig;
 use Drupal\Core\Render\Markup;
 use Drupal\node\Entity\Node;
 use Drupal\uchi_pro\Exception\ImportException;
@@ -16,9 +17,14 @@ use UchiPro\Identity;
 class ImportCoursesService
 {
   /**
+   * @var array{themes: string[], courses: string[]}
+   */
+  private array $protectedUuids = ['themes' => [], 'courses' => []];
+
+  /**
    * @throws ImportException
    */
-  public function importCourses()
+  public function importCourses(): void
   {
     if (!$this->settingsExists()) {
       throw new ImportException('Не заполнены настройки для импорта курсов.');
@@ -26,6 +32,9 @@ class ImportCoursesService
 
     try {
       $apiCourses = $this->fetchApiCourses();
+
+      // Считаем защищённые направления и курсы один раз на весь импорт.
+      $this->protectedUuids = $this->getProtectedUuids($apiCourses);
 
       if ($this->needImportTypes()) {
         $this->updateTypes($apiCourses);
@@ -42,7 +51,7 @@ class ImportCoursesService
     }
   }
 
-  private function getSettings()
+  private function getSettings(): ImmutableConfig
   {
     return Drupal::config(SettingsForm::SETTINGS);
   }
@@ -50,7 +59,7 @@ class ImportCoursesService
   /**
    * @return bool
    */
-  public function settingsExists()
+  public function settingsExists(): bool
   {
     $settings = $this->getSettings();
     $url = $settings->get('url');
@@ -63,7 +72,7 @@ class ImportCoursesService
    *
    * @throws Exception
    */
-  protected function fetchApiCourses()
+  protected function fetchApiCourses(): array
   {
     $settings = $this->getSettings();
 
@@ -191,34 +200,7 @@ class ImportCoursesService
   protected function updateThemes(array $apiCourses): array
   {
     $themesNodesByUuids = $this->getThemesNodesByUuids();
-    $ignoredThemesIds = $this->getIgnoredThemesIds();
-    // Сначала все направления — кандидаты на снятие с публикации.
     $themesForUnpublish = array_keys($themesNodesByUuids);
-
-    // Не трогаем направления, стоящие в исключениях,
-    // и все их дочерние направления (рекурсивно).
-    $collectIgnoredChildren = function (string $parentId) use (&$collectIgnoredChildren, $apiCourses): array {
-      $children = [];
-      foreach ($apiCourses as $apiCourse) {
-        if ($apiCourse->parentId === $parentId) {
-          $children[] = $apiCourse->id;
-          $children = array_merge($children, $collectIgnoredChildren($apiCourse->id));
-        }
-      }
-      return $children;
-    };
-    foreach ($ignoredThemesIds as $ignoredId) {
-      $idx = array_search($ignoredId, $themesForUnpublish);
-      if ($idx !== false) {
-        unset($themesForUnpublish[$idx]);
-      }
-      foreach ($collectIgnoredChildren($ignoredId) as $childId) {
-        $idx = array_search($childId, $themesForUnpublish);
-        if ($idx !== false) {
-          unset($themesForUnpublish[$idx]);
-        }
-      }
-    }
 
     $themesForUnpublish = array_values($themesForUnpublish);
 
@@ -260,6 +242,12 @@ class ImportCoursesService
         $needSaveTheme = true;
       }
 
+      if (!$node->isPublished() && !$this->isProtectedNode($node)) {
+        // Если направление пока не опубликовано и оно не защищено от изменений.
+        $node->setPublished();
+        $needSaveTheme = true;
+      }
+
       if ($needSaveTheme) {
         $node->save();
         $fieldList = implode(', ', $themeChangedFields);
@@ -273,10 +261,16 @@ class ImportCoursesService
     // Снимаем с публикации направления, которых нет в API.
     foreach ($themesForUnpublish as $uuid) {
       $themeNode = $themesNodesByUuids[$uuid];
+
       // Не снимаем, если тема не опубликована или у неё нет id.
       if (!empty($themeNode) && $themeNode->isPublished() && $themeNode->get('field_theme_id')->getString()) {
-        $themeNode->setUnpublished()->save();
-        $this->warning("Направление <a href=\"/node/{$themeNode->id()}/edit\" target=\"_blank\">{$themeNode->getTitle()}</a> снято с публикации.");
+        if (!$this->isProtectedNode($themeNode)) {
+          $themeNode->setUnpublished()->save();
+          $this->warning("Направление <a href=\"/node/{$themeNode->id()}/edit\" target=\"_blank\">{$themeNode->getTitle()}</a> снято с публикации.");
+        } else {
+          // Направление защищено через исключения.
+          $this->warning("Направление <a href=\"/node/{$themeNode->id()}/edit\" target=\"_blank\">{$themeNode->getTitle()}</a> защищено.");
+        }
       }
 
       unset($themesNodesByUuids[$uuid]);
@@ -313,7 +307,6 @@ class ImportCoursesService
       }
       $isIgnoredTheme = in_array($apiCourse->id, $ignoredVendorThemesIds);
       if ($isIgnoredTheme) {
-        $this->warning("Направление <a href=\"{$this->getApiCourseUrl($apiCourse)}\" target='_blank'>{$apiCourse->title}</a> пропущено согласно настройкам интеграции.");
         continue;
       }
       $isIgnoredServiceTheme = in_array($apiCourse->id, $ignoredServiceThemesIds);
@@ -452,12 +445,28 @@ class ImportCoursesService
       $this->updateCourseType($apiCourse, $previousApiCourse, $courseNode, $typesNodesByIds, $changedFields);
       $this->updateCourseFields($apiCourse, $previousApiCourse, $courseNode, $shortTitle, $price, $apiPrice, $changedFields);
 
-      // Восстанавливаем публикацию, если курс был снят (например, раньше был в исключениях).
-      if (!$courseNode->isPublished()) {
-        $isCourseLocked = (bool)$courseNode->get('field_course_locked')->getValue();
-        if (!$isCourseLocked) {
-          $changedFields[] = 'status';
-          $courseNode->setPublished();
+      $forceUnpublish = false;
+      if (!empty($importedThemesNodesByUuids[$apiCourse->parentId])) {
+        $parentNode = $importedThemesNodesByUuids[$apiCourse->parentId];
+        if (!$parentNode->isPublished()) {
+          // Если направление не опубликовано, то его курс нельзя опубликовать,
+          $forceUnpublish = true;
+          if ($courseNode->isPublished()) {
+            // сам курс снимаем с публикации если опубликован.
+            $changedFields[] = 'status by parent theme';
+            $courseNode->setUnpublished();
+          }
+        }
+      }
+
+      if (!$forceUnpublish) {
+        // Восстанавливаем публикацию, если курс был снят (например, раньше был в исключениях).
+        if (!$courseNode->isPublished()) {
+          $isCourseLocked = (bool)$courseNode->get('field_course_locked')->getValue();
+          if (!$isCourseLocked) {
+            $changedFields[] = 'status';
+            $courseNode->setPublished();
+          }
         }
       }
 
@@ -475,54 +484,29 @@ class ImportCoursesService
       $coursesNodesByUuids[$apiCourse->id] = $courseNode;
     }
 
-    // Исключаем курсы из игнорируемых тем из списка на снятие — они обрабатываются отдельно.
-    $coursesInIgnoredThemesSet = array_flip($coursesInIgnoredThemes);
-    foreach ($coursesForUnpublishUuids as $courseId) {
-      if (isset($coursesInIgnoredThemesSet[$courseId])) {
-        unset($coursesForUnpublishUuids[array_search($courseId, $coursesForUnpublishUuids)]);
-      }
-    }
-
-    // Не снимаем курсы, у которых уже есть импортированная тема.
-    // Если курс привязан к существующей теме — он не должен сниматься, даже если
-    // его parentId в API не импортировался как направление.
-    foreach ($coursesForUnpublishUuids as $courseId) {
-      if (!isset($coursesNodesByUuids[$courseId])) {
-        continue;
-      }
-      $node = $coursesNodesByUuids[$courseId];
-      $themeEntity = $node->get('field_course_theme')->entity;
-      if ($themeEntity) {
-        $themeId = $themeEntity->get('field_theme_id')->getString();
-        if (!empty($themeId) && isset($allThemesNodesByUuids[$themeId])) {
-          unset($coursesForUnpublishUuids[array_search($courseId, $coursesForUnpublishUuids)]);
-        }
-      }
-    }
-
     $coursesForUnpublishUuids = array_values($coursesForUnpublishUuids);
 
     // Снимаем с публикации курсы, которых нет в API (не существуют в СДО).
     $unpublishedCount = $this->unpublishCourses($coursesForUnpublishUuids, $coursesNodesByUuids);
 
-    // === Обрабатываем курсы в игнорируемых направлениях ===
-    $unpublishIgnoredCoursesCount = 0;
-    $publishIgnoredCoursesCount = 0;
-    if ($settings->get('unpublish_ignored_courses')) {
-      $unpublishIgnoredCoursesCount = $this->unpublishCoursesByIgnoredThemes($coursesInIgnoredThemes, $coursesNodesByUuids);
-      $publishIgnoredCoursesCount = $this->publishCoursesNotInIgnoredThemes($coursesInIgnoredThemes, $coursesNodesByUuids);
-    }
+//    // === Обрабатываем курсы в игнорируемых направлениях ===
+//    $unpublishIgnoredCoursesCount = 0;
+//    $publishIgnoredCoursesCount = 0;
+//    if ($settings->get('unpublish_ignored_courses')) {
+//      $unpublishIgnoredCoursesCount = $this->unpublishCoursesByIgnoredThemes($coursesInIgnoredThemes, $coursesNodesByUuids);
+//      $publishIgnoredCoursesCount = $this->publishCoursesNotInIgnoredThemes($coursesInIgnoredThemes, $coursesNodesByUuids);
+//    }
 
     $this->log("Обновлено курсов: {$updatedCount}");
     $this->log("Снято с публикации курсов: {$unpublishedCount}");
-    if ($settings->get('unpublish_ignored_courses')) {
-      if ($unpublishIgnoredCoursesCount > 0) {
-        $this->log("Снято с публикации курсов (направление в исключениях): {$unpublishIgnoredCoursesCount}");
-      }
-      if ($publishIgnoredCoursesCount > 0) {
-        $this->log("Возобновлено курсов (направление больше не в исключениях): {$publishIgnoredCoursesCount}");
-      }
-    }
+//    if ($settings->get('unpublish_ignored_courses')) {
+//      if ($unpublishIgnoredCoursesCount > 0) {
+//        $this->log("Снято с публикации курсов (направление в исключениях): {$unpublishIgnoredCoursesCount}");
+//      }
+//      if ($publishIgnoredCoursesCount > 0) {
+//        $this->log("Возобновлено курсов (направление больше не в исключениях): {$publishIgnoredCoursesCount}");
+//      }
+//    }
 
     return $coursesNodesByUuids;
   }
@@ -561,6 +545,51 @@ class ImportCoursesService
     }
 
     return $courses;
+  }
+
+  /**
+   * Возвращает UUID защищённых от снятия с публикации направлений и курсов.
+   *
+   * Защищаются направления из исключений (vendor + service) и все их
+   * потомки, а также курсы, чьё направление входит в это дерево.
+   *
+   * @param array|ApiCourse[] $apiCourses
+   * @return array{themes: string[], courses: string[]}
+   */
+  private function getProtectedUuids(array $apiCourses): array
+  {
+    $collectDescendantIds = function (string $parentId) use (&$collectDescendantIds, $apiCourses): array {
+      $ids = [];
+      foreach ($apiCourses as $apiCourse) {
+        if ($apiCourse->parentId === $parentId) {
+          $ids[] = $apiCourse->id;
+          $ids = array_merge($ids, $collectDescendantIds($apiCourse->id));
+        }
+      }
+      return $ids;
+    };
+
+    // Само исключённое направление + все его потомки (направления и курсы).
+    $protectedThemeIds = [];
+    foreach ($this->getIgnoredThemesIds() as $ignoredId) {
+      $protectedThemeIds[] = $ignoredId;
+      $protectedThemeIds = array_merge($protectedThemeIds, $collectDescendantIds($ignoredId));
+    }
+
+    $protectedThemeIds = array_flip(array_unique($protectedThemeIds));
+
+    // Курсы, чьё направление входит в защищённое дерево.
+    $protectedCourseIds = [];
+    foreach ($apiCourses as $apiCourse) {
+      if (isset($protectedThemeIds[$apiCourse->parentId])) {
+        $protectedCourseIds[] = $apiCourse->id;
+      }
+    }
+
+    return [
+      'themes' => array_keys($protectedThemeIds),
+      'courses' => $protectedCourseIds,
+    ];
   }
 
   /**
@@ -708,16 +737,18 @@ class ImportCoursesService
       $courseNode = $coursesNodesByUuids[$courseId];
 
       if ($courseNode->isPublished()) {
-        $lockedValue = $courseNode->get('field_course_locked')->getValue();
-        $isCourseLocked = !empty($lockedValue) && $lockedValue[0]['value'] == 1;
-        if (!$isCourseLocked) {
+        if (!$this->isProtectedNode($courseNode)) {
           $count++;
           $courseNode->setUnpublished();
           $courseNode->save();
 
-          $this->status("Курс <a href=\"/node/{$courseNode->id()}/edit\" target=\"_blank\">{$courseNode->get('field_course_title')->getString()}</a> (<a href=\"{$this->getApiCourseUrlById($courseId)}\" target=\"_blank\">СДО</a>) снят с публикации.");
+          $this->status(
+            "Курс <a href=\"/node/{$courseNode->id()}/edit\" target=\"_blank\">{$courseNode->get('field_course_title')->getString()}</a> (<a href=\"{$this->getApiCourseUrlById($courseId)}\" target=\"_blank\">СДО</a>) снят с публикации."
+          );
         } else {
-          $this->status("Курс <a href=\"/node/{$courseNode->id()}/edit\" target=\"_blank\">{$courseNode->get('field_course_title')->getString()}</a> (<a href=\"{$this->getApiCourseUrlById($courseId)}\" target=\"_blank\">СДО</a>) не снят с публикации т.к. защищён.");
+          $this->warning(
+            "Курс <a href=\"/node/{$courseNode->id()}/edit\" target=\"_blank\">{$courseNode->get('field_course_title')->getString()}</a> (<a href=\"{$this->getApiCourseUrlById($courseId)}\" target=\"_blank\">СДО</a>) не снят с публикации т.к. защищён."
+          );
         }
       }
     }
@@ -797,7 +828,7 @@ class ImportCoursesService
   /**
    * Выводит предупреждение пользователю.
    */
-  private function warning($messageText)
+  private function warning($messageText): void
   {
     $message = Markup::create($messageText);
     $messanger = Drupal::messenger();
@@ -807,7 +838,7 @@ class ImportCoursesService
   /**
    * Записывает сообщение в лог и выводит пользователю.
    */
-  private function log($message)
+  private function log($message): void
   {
     $this->status($message);
     Drupal::logger('uchi_pro')->info($message);
@@ -896,5 +927,50 @@ class ImportCoursesService
       $needImportTypes = true;
     }
     return $needImportTypes;
+  }
+
+  /**
+   * Проверяет, защищена ли нода от снятия с публикации при импорте.
+   *
+   * Защита применяется только если НЕ включена настройка
+   * unpublish_ignored_courses («Снимать с публикации ранее опубликованные
+   * курсы, если они стоят в исключениях»):
+   * - направление защищено, если его UUID входит в дерево исключённых
+   *   направлений ($this->protectedUuids['themes']);
+   * - курс защищён, если его UUID входит в список курсов из исключённых
+   *   направлений ($this->protectedUuids['courses']).
+   *
+   * Если настройка включена — защита через исключения не действует, и
+   * курсы из исключений снимаются с публикации.
+   *
+   * @param Node $node
+   * @return bool
+   */
+  private function isProtectedNode(Node $node): bool
+  {
+    if ($node->getType() == 'course') {
+      $isCourseLocked = (bool)$node->get('field_course_locked')->getValue();
+      if ($isCourseLocked) {
+        // Курс заблокирован от изменений.
+        return false;
+      }
+    }
+
+    $settings = $this->getSettings();
+    $needProtection = !$settings->get('unpublish_ignored_courses');
+
+    if ($needProtection) {
+      if ($node->getType() == 'theme') {
+        $themeId = $node->get('field_theme_id')->getString();
+        if (!empty($themeId)) {
+          return in_array($themeId, $this->protectedUuids['themes']);
+        }
+      }
+      if ($node->getType() == 'course') {
+        return in_array($node->get('field_course_id')->getString(), $this->protectedUuids['courses']);
+      }
+    }
+
+    return false;
   }
 }

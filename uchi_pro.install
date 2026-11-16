@@ -7,6 +7,17 @@ function uchi_pro_update_9010() {
   create_course_fix_theme_field();
 }
 
+/**
+ * Включает обновление продолжительности курсов по умолчанию.
+ */
+function uchi_pro_update_9020() {
+  $config = \Drupal::configFactory()->getEditable('uchi_pro.settings');
+  if ($config->get('update_courses_hours') === NULL) {
+    $config->set('update_courses_hours', TRUE);
+    $config->save();
+  }
+}
+
 function create_course_fix_theme_field() {
   $bundles = ['course'];
 

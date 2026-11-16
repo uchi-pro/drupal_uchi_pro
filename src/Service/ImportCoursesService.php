@@ -709,7 +709,8 @@ class ImportCoursesService
       $courseNode->set('field_course_price', ['value' => $apiCourse->price]);
     }
 
-    if ($apiCourse->hours != $previousApiCourse->hours) {
+    if ($settings->get('update_courses_hours') && ($apiCourse->hours != $previousApiCourse->hours)) {
+      // Если нужно обновлять часы и часы изменились.
       $changedFields[] = 'field_course_hours';
       $courseNode->set('field_course_hours', ['value' => $apiCourse->hours]);
     }

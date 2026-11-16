@@ -1,0 +1,5 @@
+services:
+  uchi_pro.commands:
+    class: Drupal\uchi_pro\Commands\UchiProCommands
+    tags:
+      - { name: drush.command }

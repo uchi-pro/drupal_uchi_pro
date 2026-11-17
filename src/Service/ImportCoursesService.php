@@ -462,7 +462,7 @@ class ImportCoursesService
       if (!$forceUnpublish) {
         // Восстанавливаем публикацию, если курс был снят (например, раньше был в исключениях).
         if (!$courseNode->isPublished()) {
-          $isCourseLocked = (bool)$courseNode->get('field_course_locked')->getValue();
+          $isCourseLocked = (bool)$courseNode->get('field_course_locked')->value;
           if (!$isCourseLocked) {
             $changedFields[] = 'status';
             $courseNode->setPublished();
@@ -716,7 +716,7 @@ class ImportCoursesService
     }
 
     $apiPlan = $this->getApiPlan($apiCourse);
-    $rawPlan = $courseNode->get('field_course_plan')->getValue();
+    $rawPlan = $courseNode->get('field_course_plan')->value;
     $previousPlan = null;
     if (!empty($rawPlan) && isset($rawPlan[0]['value'])) {
       $previousPlan = unserialize($rawPlan[0]['value']);
@@ -770,8 +770,7 @@ class ImportCoursesService
       $courseNode = $coursesNodesByUuids[$courseId];
 
       if ($courseNode->isPublished()) {
-        $lockedValue = $courseNode->get('field_course_locked')->getValue();
-        $isCourseLocked = !empty($lockedValue) && $lockedValue[0]['value'] == 1;
+        $isCourseLocked = (bool)$courseNode->get('field_course_locked')->value;
         if (!$isCourseLocked) {
           $count++;
           $courseNode->setUnpublished();
@@ -802,7 +801,7 @@ class ImportCoursesService
       if ($courseNode->isPublished()) {
         continue;
       }
-      $isCourseLocked = (bool)$courseNode->get('field_course_locked')->getValue();
+      $isCourseLocked = (bool)$courseNode->get('field_course_locked')->value;
       if ($isCourseLocked) {
         continue;
       }
@@ -885,10 +884,10 @@ class ImportCoursesService
       $apiCourse->type = $type;
     }
     $apiCourse->title = $node->get('field_course_title')->getString();
-    $rawDescription = $node->get('field_course_description')->getValue()[0]['value'] ?? '';
+    $rawDescription = $node->get('field_course_description')->value[0]['value'] ?? '';
     $apiCourse->description = $rawDescription;
     $apiCourse->price = $node->get('field_course_price')->getString();
-    $apiCourse->hours = (int)$node->get('field_course_hours')->getString() ?? null;
+    $apiCourse->hours = $node->get('field_course_hours')->getString() !== '' ? (int)$node->get('field_course_hours')->getString() : null;
 
     return $apiCourse;
   }
@@ -950,7 +949,7 @@ class ImportCoursesService
   private function isProtectedNode(Node $node): bool
   {
     if ($node->getType() == 'course') {
-      $isCourseLocked = (bool)$node->get('field_course_locked')->getValue();
+      $isCourseLocked = (bool)$node->get('field_course_locked')->value;
       if ($isCourseLocked) {
         // Курс заблокирован от изменений.
         return false;

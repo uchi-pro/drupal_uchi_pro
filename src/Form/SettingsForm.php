@@ -53,7 +53,10 @@ class SettingsForm extends ConfigFormBase {
     $form['import_courses']['ignored_themes_ids'] = [
       '#type' => 'textarea',
       '#title' => 'Идентификаторы направлений (UUID), курсы по которым не должны импортироваться на сайт',
-      '#rows' => 6,
+      '#rows' => count(array_filter(explode("\n", trim((string)$config->get('ignored_themes_ids'))), function ($line) {
+        $trimmed = ltrim($line);
+        return $trimmed !== '' && strpos($trimmed, '#') !== 0;
+      })) + 3,
       '#default_value' => $config->get('ignored_themes_ids'),
       '#description' => 'По одному идентификатору направления вида 00000000-0000-0000-C000-000000000000 в строку.',
     ];

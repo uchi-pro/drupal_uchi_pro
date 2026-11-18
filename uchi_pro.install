@@ -18,6 +18,17 @@ function uchi_pro_update_9020() {
   }
 }
 
+/**
+ * Включает обновление учебных планов курсов по умолчанию.
+ */
+function uchi_pro_update_9030() {
+  $config = \Drupal::configFactory()->getEditable('uchi_pro.settings');
+  if ($config->get('update_courses_plans') === NULL) {
+    $config->set('update_courses_plans', TRUE);
+    $config->save();
+  }
+}
+
 function create_course_fix_theme_field() {
   $bundles = ['course'];
 

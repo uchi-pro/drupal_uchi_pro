@@ -678,7 +678,7 @@ class ImportCoursesService
    *
    * Название, описание и цена обновляются только если включены соответствующие настройки.
    * Цена не обновляется, если в СДО она отсутствует (null).
-   * Часы и учебный план обновляются всегда.
+   * Часы и учебный план обновляются, если включены соответствующие настройки.
    * План сравнивается как десериализованный массив, а не строка.
    */
   private function updateCourseFields(ApiCourse $apiCourse, ApiCourse $previousApiCourse, Node $courseNode, string $shortTitle, int|float $price, $apiPrice, array &$changedFields): void
@@ -721,7 +721,7 @@ class ImportCoursesService
     if (!empty($rawPlan) && isset($rawPlan[0]['value'])) {
       $previousPlan = unserialize($rawPlan[0]['value']);
     }
-    if ($apiPlan != $previousPlan) {
+    if ($settings->get('update_courses_plans') && $apiPlan != $previousPlan) {
       $changedFields[] = 'field_course_plan';
       $serializedPlan = $apiPlan ? serialize($apiPlan) : null;
       $courseNode->set('field_course_plan', $serializedPlan ? ['value' => $serializedPlan] : null);

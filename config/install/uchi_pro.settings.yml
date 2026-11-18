@@ -2,4 +2,5 @@ publish_courses_on_import: true
 update_courses_titles: true
 update_courses_prices: true
 update_courses_hours: true
+update_courses_plans: true
 unpublish_ignored_courses: false

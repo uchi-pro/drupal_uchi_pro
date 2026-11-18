@@ -88,6 +88,12 @@ class SettingsForm extends ConfigFormBase {
       '#default_value' => $config->get('update_courses_hours'),
     ];
 
+    $form['import_courses']['update_courses_plans'] = [
+      '#type' => 'checkbox',
+      '#title' => 'Обновлять учебные планы курсов при импорте',
+      '#default_value' => $config->get('update_courses_plans'),
+    ];
+
     $form['import_courses']['unpublish_ignored_courses'] = [
       '#type' => 'checkbox',
       '#title' => 'Снимать с публикации ранее опубликованные курсы, если они стоят в исключениях',
@@ -217,6 +223,7 @@ class SettingsForm extends ConfigFormBase {
     $updateCoursesDescriptions = $form_state->getValue('update_courses_descriptions');
     $updateCoursesPrices = $form_state->getValue('update_courses_prices');
     $updateCoursesHours = $form_state->getValue('update_courses_hours');
+    $updateCoursesPlans = $form_state->getValue('update_courses_plans');
     $importTypes = $form_state->getValue('import_types');
     $useCron = $form_state->getValue('use_cron');
     $unpublishIgnoredCourses = $form_state->getValue('unpublish_ignored_courses');
@@ -246,6 +253,7 @@ class SettingsForm extends ConfigFormBase {
     $config->set('update_courses_descriptions', $updateCoursesDescriptions);
     $config->set('update_courses_prices', $updateCoursesPrices);
     $config->set('update_courses_hours', $updateCoursesHours);
+    $config->set('update_courses_plans', $updateCoursesPlans);
     $config->set('import_types', $importTypes);
     $config->set('use_cron', $useCron);
     $config->set('unpublish_ignored_courses', $unpublishIgnoredCourses);
